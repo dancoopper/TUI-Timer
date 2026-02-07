@@ -58,14 +58,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
-		case "tab", "shift+tab", "left", "right":
+		case "tab", "shift+tab", "left", "right", "up", "down":
 			s := msg.String()
 
-			// Cycle through focus
-			if s == "left" || s == "shift+tab" {
-				m.focusIndex--
-			} else {
+			switch s {
+			case "tab":
 				m.focusIndex++
+				break
+			case "shift+tab":
+				m.focusIndex--
+				break
+			case "left":
+				m.focusIndex--
+				break
+			case "right":
+				m.focusIndex++
+				break
+			case "up":
+				if m.focusIndex > 0 {
+					m.focusIndex = 0
+					break
+				}
+				m.focusIndex--
+				break
+			case "down":
+				if m.focusIndex > 0 {
+
+					break
+				}
+				m.focusIndex++
+				break
 			}
 
 			if m.focusIndex > 3 {
