@@ -64,30 +64,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch s {
 			case "tab":
 				m.focusIndex++
-				break
+
 			case "shift+tab":
 				m.focusIndex--
-				break
+
 			case "left":
 				m.focusIndex--
-				break
+
 			case "right":
 				m.focusIndex++
-				break
+
 			case "up":
 				if m.focusIndex > 0 {
 					m.focusIndex = 0
-					break
 				}
 				m.focusIndex--
-				break
+
 			case "down":
 				if m.focusIndex > 0 {
 
-					break
 				}
 				m.focusIndex++
-				break
+
 			}
 
 			if m.focusIndex > 3 {
@@ -105,6 +103,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 
 		case "enter":
+
 			if m.focusIndex == 0 { // Input field
 				// Treat Enter in input field as "Start" if valid, or just move focus?
 				// User might expect to submit. Let's try to start.
@@ -121,6 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else if m.focusIndex == 1 { // Start Button
 				parsed, err := time.ParseDuration(m.textInput.Value())
+
 				if err == nil && parsed > 0 {
 					m.duration = parsed
 					m.remaining = parsed
