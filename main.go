@@ -29,6 +29,7 @@ type model struct {
 	remaining  time.Duration
 	running    bool
 	focusIndex int // 0: input, 1: start, 2: stop, 3: quit
+	focusState int // what the last thing that was focused? maybe a bad Idea but we will see
 }
 
 func initialModel() model {
@@ -69,27 +70,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusIndex--
 
 			case "left":
+
 				m.focusIndex--
+				m.focusState = m.focusIndex // get the last thing we focused on so we can have a sort of memory of what the last state was before we changed it
 
 			case "right":
+
 				m.focusIndex++
+				m.focusState = m.focusIndex // get the last thing we focused on so we can have a sort of memory of what the last state was before we changed it
 
 			case "up":
-				if m.focusIndex > 0 {
+				if m.focusIndex > 0 { // if in input field, move to start button
 					m.focusIndex = 0
+					break
 				}
 				m.focusIndex--
 
 			case "down":
-				if m.focusIndex > 0 {
 
+				if m.focusIndex == 0 {
+					m.focusIndex = m.focusState
+				}
+
+				if m.focusIndex > 0 { // if in quit button, move to input field
+
+					break
 				}
 				m.focusIndex++
 
 			}
 
 			if m.focusIndex > 3 {
-				m.focusIndex = 0
+				m.focusIndex = 1
 			} else if m.focusIndex < 0 {
 				m.focusIndex = 3
 			}
