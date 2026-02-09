@@ -23,13 +23,23 @@ var (
 	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("%s"))
 )
 
+type Focus int
+
+const (
+	INPUT = Focus(0)
+	START = Focus(1)
+	STOP  = Focus(2)
+	RESET = Focus(3)
+	QUIT  = Focus(4)
+)
+
 type model struct {
 	textInput  textinput.Model
 	duration   time.Duration
 	remaining  time.Duration
 	running    bool
-	focusIndex int // 0: input, 1: start, 2: stop, 3: quit
-	focusState int // what the last thing that was focused? maybe a bad Idea but we will see
+	focusIndex Focus // 0: input, 1: start, 2: stop, 3: quit
+	focusState Focus // what the last thing that was focused? maybe a bad Idea but we will see
 }
 
 func initialModel() model {
@@ -41,7 +51,7 @@ func initialModel() model {
 
 	return model{
 		textInput:  ti,
-		focusIndex: 0,
+		focusIndex: INPUT,
 	}
 }
 
@@ -71,43 +81,64 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case "left":
 
+				if m.focusIndex == 0 {
+					m.focusIndex = START
+					m.focusState = START
+					break
+				}
+
+				if m.focusIndex == START {
+					m.focusIndex = QUIT
+					m.focusState = QUIT
+					break
+				}
+
 				m.focusIndex--
 				m.focusState = m.focusIndex // get the last thing we focused on so we can have a sort of memory of what the last state was before we changed it
 
 			case "right":
+				if m.focusIndex == INPUT {
+					m.focusIndex = QUIT
+					m.focusState = QUIT
+					break
+				}
+				if m.focusIndex == QUIT {
+					m.focusIndex = START
+					m.focusState = START
+					break
+				}
 
 				m.focusIndex++
 				m.focusState = m.focusIndex // get the last thing we focused on so we can have a sort of memory of what the last state was before we changed it
 
 			case "up":
-				if m.focusIndex > 0 { // if in input field, move to start button
-					m.focusIndex = 0
+				if m.focusIndex > INPUT { // if in input field, move to start button
+					m.focusIndex = INPUT
 					break
 				}
-				m.focusIndex--
+				//m.focusIndex--
 
 			case "down":
 
-				if m.focusIndex == 0 {
+				if m.focusIndex == INPUT {
 					m.focusIndex = m.focusState
 				}
 
-				if m.focusIndex > 0 { // if in quit button, move to input field
-
+				if m.focusIndex > INPUT { // if in the buttons part and user press down, app should do nothing
 					break
 				}
 				m.focusIndex++
 
 			}
 
-			if m.focusIndex > 4 {
-				m.focusIndex = 1
-			} else if m.focusIndex < 0 {
-				m.focusIndex = 4
+			if m.focusIndex > QUIT {
+				m.focusIndex = INPUT
+			} else if m.focusIndex < INPUT {
+				m.focusIndex = QUIT
 			}
 
 			// Handle Input Focus
-			if m.focusIndex == 0 {
+			if m.focusIndex == INPUT {
 				cmd = m.textInput.Focus()
 			} else {
 				m.textInput.Blur()
@@ -116,7 +147,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 
-			if m.focusIndex == 0 { // Input field
+			if m.focusIndex == INPUT { // Input field
 				// Treat Enter in input field as "Start" if valid, or just move focus?
 				// User might expect to submit. Let's try to start.
 				parsed, err := time.ParseDuration(m.textInput.Value())
@@ -126,12 +157,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.running = true
 					m.textInput.SetValue("")
 					m.textInput.Blur()
-					m.focusIndex = 2 // Move focus to Stop
+					m.focusIndex = STOP // Move focus to Stop
 					return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
 						return tickMsg(t)
 					})
 				}
-			} else if m.focusIndex == 1 { // Start Button
+			} else if m.focusIndex == START { // Start Button
 
 				parsed, err := time.ParseDuration(m.textInput.Value())
 
@@ -149,9 +180,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					})
 				}
 
-			} else if m.focusIndex == 2 { // Stop Button
+			} else if m.focusIndex == STOP { // Stop Button
 				m.running = false
-			} else if m.focusIndex == 3 { // Reset Button
+			} else if m.focusIndex == RESET { // Reset Button
 				m.duration = 0
 				m.remaining = 0
 				m.running = false
@@ -177,7 +208,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Update text input only if focused
-	if m.focusIndex == 0 {
+	if m.focusIndex == INPUT {
 		m.textInput, cmd = m.textInput.Update(msg)
 	}
 	return m, cmd
@@ -202,28 +233,28 @@ func (m model) View() string {
 
 	// Buttons
 	startButton := fmt.Sprintf("[ %s ]", "Start")
-	if m.focusIndex == 1 {
+	if m.focusIndex == START {
 		startButton = fmt.Sprintf(focusedButton, "Start")
 	} else {
 		startButton = fmt.Sprintf(blurredButton, "Start")
 	}
 
 	stopButton := fmt.Sprintf("[ %s ]", "Stop")
-	if m.focusIndex == 2 {
+	if m.focusIndex == STOP {
 		stopButton = fmt.Sprintf(focusedButton, "Stop")
 	} else {
 		stopButton = fmt.Sprintf(blurredButton, "Stop")
 	}
 
 	resetButton := fmt.Sprintf("[ %s ]", "Reset")
-	if m.focusIndex == 3 {
+	if m.focusIndex == RESET {
 		resetButton = fmt.Sprintf(focusedButton, "Reset")
 	} else {
 		resetButton = fmt.Sprintf(blurredButton, "Reset")
 	}
 
 	quitButton := fmt.Sprintf("[ %s ]", "Quit")
-	if m.focusIndex == 4 {
+	if m.focusIndex == QUIT {
 		quitButton = fmt.Sprintf(focusedButton, "Quit")
 	} else {
 		quitButton = fmt.Sprintf(blurredButton, "Quit")
@@ -237,7 +268,7 @@ func (m model) View() string {
 }
 
 func main() {
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error: %v", err)
 		os.Exit(1)
