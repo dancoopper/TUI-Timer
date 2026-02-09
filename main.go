@@ -100,10 +100,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			}
 
-			if m.focusIndex > 3 {
+			if m.focusIndex > 4 {
 				m.focusIndex = 1
 			} else if m.focusIndex < 0 {
-				m.focusIndex = 3
+				m.focusIndex = 4
 			}
 
 			// Handle Input Focus
@@ -124,6 +124,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.duration = parsed
 					m.remaining = parsed
 					m.running = true
+					m.textInput.SetValue("")
 					m.textInput.Blur()
 					m.focusIndex = 2 // Move focus to Stop
 					return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
@@ -131,19 +132,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					})
 				}
 			} else if m.focusIndex == 1 { // Start Button
+
 				parsed, err := time.ParseDuration(m.textInput.Value())
 
-				if err == nil && parsed > 0 {
+				if err != nil {
+					parsed = m.remaining
+				}
+
+				if parsed > 0 {
 					m.duration = parsed
 					m.remaining = parsed
 					m.running = true
+					m.textInput.SetValue("")
 					return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
 						return tickMsg(t)
 					})
 				}
+
 			} else if m.focusIndex == 2 { // Stop Button
 				m.running = false
-			} else if m.focusIndex == 3 { // Quit Button
+			} else if m.focusIndex == 3 { // Reset Button
+				m.duration = 0
+				m.remaining = 0
+				m.running = false
+				m.textInput.SetValue("")
+				//m.focusIndex = 0
+			} else if m.focusIndex == 4 { // Quit Button
 				return m, tea.Quit
 			}
 		}
@@ -201,14 +215,21 @@ func (m model) View() string {
 		stopButton = fmt.Sprintf(blurredButton, "Stop")
 	}
 
-	quitButton := fmt.Sprintf("[ %s ]", "Quit")
+	resetButton := fmt.Sprintf("[ %s ]", "Reset")
 	if m.focusIndex == 3 {
+		resetButton = fmt.Sprintf(focusedButton, "Reset")
+	} else {
+		resetButton = fmt.Sprintf(blurredButton, "Reset")
+	}
+
+	quitButton := fmt.Sprintf("[ %s ]", "Quit")
+	if m.focusIndex == 4 {
 		quitButton = fmt.Sprintf(focusedButton, "Quit")
 	} else {
 		quitButton = fmt.Sprintf(blurredButton, "Quit")
 	}
 
-	s.WriteString(fmt.Sprintf("  %s  %s  %s\n\n", startButton, stopButton, quitButton))
+	s.WriteString(fmt.Sprintf("  %s  %s  %s  %s\n\n", startButton, stopButton, resetButton, quitButton))
 
 	s.WriteString(helpStyle.Render("  (Tab to navigate, Enter to select)\n"))
 
