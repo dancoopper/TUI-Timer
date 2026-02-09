@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -21,6 +22,9 @@ var (
 
 	focusedButton = focusedStyle.Copy().Render("[ %s ]")
 	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("%s"))
+
+	// Animation styles
+	alarmStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true) // Red bold
 )
 
 type Focus int
@@ -38,6 +42,10 @@ type model struct {
 	duration   time.Duration
 	remaining  time.Duration
 	running    bool
+	finished   bool  // New state for when timer is done
+	blink      bool  // For animation
+	width      int   // Screen width
+	height     int   // Screen height
 	focusIndex Focus // 0: input, 1: start, 2: stop, 3: quit
 	focusState Focus // what the last thing that was focused? maybe a bad Idea but we will see
 }
@@ -60,12 +68,42 @@ func (m model) Init() tea.Cmd {
 }
 
 type tickMsg time.Time
+type blinkMsg time.Time
+
+func playSound() {
+	// Try standard sound paths
+	soundFiles := []string{
+		"/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga",
+		"/usr/share/sounds/freedesktop/stereo/complete.oga",
+	}
+
+	for _, sf := range soundFiles {
+		if _, err := os.Stat(sf); err == nil {
+			// Fire and forget sound
+			_ = exec.Command("paplay", sf).Start()
+			return
+		}
+	}
+	// Fallback to bell
+	fmt.Print("\a")
+}
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case tea.KeyMsg:
+		// If timer is finished, any key stops the alarm
+		if m.finished {
+			m.finished = false
+			m.blink = false
+			// m.startFocus() // Optional: Logic to reset focus if needed
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -155,6 +193,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.duration = parsed
 					m.remaining = parsed
 					m.running = true
+					m.finished = false
 					m.textInput.SetValue("")
 					m.textInput.Blur()
 					m.focusIndex = STOP // Move focus to Stop
@@ -174,6 +213,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.duration = parsed
 					m.remaining = parsed
 					m.running = true
+					m.finished = false
 					m.textInput.SetValue("")
 					return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
 						return tickMsg(t)
@@ -186,6 +226,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.duration = 0
 				m.remaining = 0
 				m.running = false
+				m.finished = false
 				m.textInput.SetValue("")
 				//m.focusIndex = 0
 			} else if m.focusIndex == 4 { // Quit Button
@@ -199,10 +240,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.remaining <= 0 {
 				m.running = false
 				m.remaining = 0
-				return m, nil // or maybe play a sound/notify
+				m.finished = true
+				// Start alarm and blink loop
+				return m, tea.Batch(
+					func() tea.Msg { playSound(); return nil },
+					tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return blinkMsg(t) }),
+				)
 			}
 			return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
 				return tickMsg(t)
+			})
+		}
+
+	case blinkMsg:
+		if m.finished {
+			m.blink = !m.blink
+			return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+				return blinkMsg(t)
 			})
 		}
 	}
@@ -217,18 +271,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var s strings.Builder
 
-	s.WriteString("\n  Timer TUI\n\n")
-
 	// Input
-	s.WriteString("  Duration: ")
+	s.WriteString("Duration: ")
 	s.WriteString(m.textInput.View())
 	s.WriteString("\n\n")
 
 	// Timer Display
-	if m.remaining > 0 || m.running {
-		s.WriteString(fmt.Sprintf("  Time Remaining: %s\n\n", m.remaining.Round(time.Second)))
+	if m.finished {
+		msg := "Time's Up!"
+		if m.blink {
+			s.WriteString(alarmStyle.Render(msg) + "\n\n")
+		} else {
+			s.WriteString(msg + "\n\n")
+		}
+	} else if m.remaining > 0 || m.running {
+		s.WriteString(fmt.Sprintf("Time Remaining: %s\n\n", m.remaining.Round(time.Second)))
 	} else {
-		s.WriteString("  Time Remaining: 0s\n\n")
+		s.WriteString("Time Remaining: 0s\n\n")
 	}
 
 	// Buttons
@@ -260,11 +319,15 @@ func (m model) View() string {
 		quitButton = fmt.Sprintf(blurredButton, "Quit")
 	}
 
-	s.WriteString(fmt.Sprintf("  %s  %s  %s  %s\n\n", startButton, stopButton, resetButton, quitButton))
+	s.WriteString(fmt.Sprintf("%s  %s  %s  %s\n\n", startButton, stopButton, resetButton, quitButton))
 
-	s.WriteString(helpStyle.Render("  (Tab to navigate, Enter to select)\n"))
+	if m.finished {
+		s.WriteString(helpStyle.Render("(Press any key to stop alarm)"))
+	} else {
+		s.WriteString(helpStyle.Render("(Tab to navigate, Enter to select)"))
+	}
 
-	return s.String()
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, s.String())
 }
 
 func main() {
