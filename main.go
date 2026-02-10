@@ -60,18 +60,32 @@ type model struct {
 	alarmCancel context.CancelFunc // To stop the playing sound
 }
 
-func initialModel() model {
+func initialModel(initialDuration time.Duration) model {
 	ti := textinput.New()
 	ti.Placeholder = "10s (e.g. 5m, 1h30m)"
 	ti.Focus()
 	ti.CharLimit = 20
 	ti.Width = 30
 
+	timers := []*Timer{}
+	nextID := 1
+	if initialDuration > 0 {
+		timers = append(timers, &Timer{
+			ID:        1,
+			Duration:  initialDuration,
+			Remaining: initialDuration,
+			Running:   true,
+			Finished:  false,
+			Alarming:  false,
+		})
+		nextID = 2
+	}
+
 	return model{
 		textInput:  ti,
 		focusIndex: INPUT,
-		timers:     []*Timer{},
-		nextID:     1,
+		timers:     timers,
+		nextID:     nextID,
 	}
 }
 
@@ -391,7 +405,16 @@ func (m model) View() string {
 }
 
 func main() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	var duration time.Duration
+	if len(os.Args) > 1 {
+		var err error
+		duration, err = time.ParseDuration(os.Args[1])
+		if err != nil {
+			fmt.Printf("Invalid duration: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	p := tea.NewProgram(initialModel(duration), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error: %v", err)
 		os.Exit(1)
